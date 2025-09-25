@@ -1,0 +1,1 @@
+"""Cassandra foreach sink implementation."""
