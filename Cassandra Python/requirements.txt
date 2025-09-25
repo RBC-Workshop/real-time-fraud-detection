@@ -3,8 +3,8 @@ pandas==2.1.4
 flask-table==0.5.0
 cassandra-driver==3.29.1
 prometheus-client==0.19.0
-opentelemetry-api==1.21.0
-opentelemetry-sdk==1.21.0
-opentelemetry-instrumentation-flask==0.42b0
-opentelemetry-instrumentation-cassandra==0.42b0
-opentelemetry-exporter-jaeger==1.21.0
+opentelemetry-api==1.20.0
+opentelemetry-sdk==1.20.0
+opentelemetry-instrumentation-flask==0.41b0
+opentelemetry-instrumentation-cassandra==0.41b0
+opentelemetry-exporter-otlp==1.20.0

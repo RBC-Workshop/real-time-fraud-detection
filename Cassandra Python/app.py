@@ -19,7 +19,7 @@ from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTEN
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
-from opentelemetry.exporter.jaeger.thrift import JaegerExporter
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.instrumentation.cassandra import CassandraInstrumentor
 
@@ -33,12 +33,12 @@ application = Flask(__name__)
 trace.set_tracer_provider(TracerProvider())
 tracer = trace.get_tracer(__name__)
 
-jaeger_exporter = JaegerExporter(
-    agent_host_name=os.getenv("JAEGER_AGENT_HOST", "localhost"),
-    agent_port=int(os.getenv("JAEGER_AGENT_PORT", "6831")),
+otlp_exporter = OTLPSpanExporter(
+    endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
+    insecure=True,
 )
 
-span_processor = BatchSpanProcessor(jaeger_exporter)
+span_processor = BatchSpanProcessor(otlp_exporter)
 trace.get_tracer_provider().add_span_processor(span_processor)
 
 FlaskInstrumentor().instrument_app(application)

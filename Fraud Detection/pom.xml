@@ -123,11 +123,12 @@
       <version>3.3.2</version>
     </dependency>
 
-    <!-- https://mvnrepository.com/artifact/log4j/log4j -->
+    <!-- Use Log4j 1.x compatible with Spark but exclude to use Spark's provided version -->
     <dependency>
       <groupId>log4j</groupId>
       <artifactId>log4j</artifactId>
       <version>1.2.17</version>
+      <scope>provided</scope>
     </dependency>
  <!-- https://mvnrepository.com/artifact/log4j/log4j -->
   <!--  <dependency>

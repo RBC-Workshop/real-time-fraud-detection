@@ -3,7 +3,8 @@ package com.datamantra.fraudalertdashboard.dashboard;
 import com.datamantra.fraudalertdashboard.dao.NonFraudDataRepository;
 import com.datamantra.fraudalertdashboard.dao.entity.NonFraudData;
 import com.datamantra.fraudalertdashboard.vo.ResponseNF;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -19,7 +20,7 @@ import java.util.*;
  */
 @Service
 public class NonFraudService {
-	private static final Logger logger = Logger.getLogger(NonFraudService.class);
+	private static final Logger logger = LogManager.getLogger(NonFraudService.class);
 
 
 	@Autowired
