@@ -87,3 +87,45 @@ Following screenshots illustrate the examples of two API calls:
 ![api_customer](./src/api_customer.png)
 
 ![api_statement](./src/api_statement.png)
+
+
+## Testing Framework (SCRUM-25)
+
+A comprehensive end-to-end testing framework has been implemented to validate the PySpark fraud detection system against the existing Scala baseline. The testing framework ensures production readiness through rigorous validation across multiple dimensions.
+
+### Test Categories
+
+- **ML Accuracy Tests**: Validates >99% prediction accuracy between PySpark and Scala implementations
+- **Performance Benchmarks**: Ensures ±25% performance tolerance for throughput, memory usage, and latency
+- **Fault Tolerance Tests**: Validates system resilience under Kafka broker failures, Cassandra outages, and network partitions
+- **Integration Tests**: End-to-end pipeline validation with realistic data flows
+- **Code Coverage**: Ensures >80% test coverage across all Python modules
+
+### Quick Start
+
+```bash
+# Install test dependencies
+cd tests/
+pip install -r requirements.txt
+
+# Run all tests
+python run_tests.py
+
+# Run specific test categories
+pytest test_ml_accuracy.py -v          # ML accuracy validation
+pytest test_performance_benchmark.py -v # Performance benchmarking
+pytest test_fault_tolerance.py -v      # Fault tolerance scenarios
+pytest test_integration.py -v          # Integration testing
+
+# Generate coverage report
+pytest --cov=../src/python --cov-report=html
+```
+
+### Key Features
+
+- **Realistic Test Data Generation**: Synthetic transaction and customer data with configurable fraud rates
+- **Automated Performance Monitoring**: Real-time metrics collection during test execution
+- **Fault Injection Framework**: Simulates various failure scenarios for resilience testing
+- **Comprehensive Reporting**: Detailed test reports with performance benchmarks and coverage analysis
+
+For detailed testing documentation, setup instructions, and advanced configuration options, see [README_TESTING.md](./README_TESTING.md).
