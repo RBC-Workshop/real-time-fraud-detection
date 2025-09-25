@@ -66,7 +66,7 @@
     <dependency>
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka-clients</artifactId>
-      <version>0.10.0.1</version>
+      <version>0.10.2.2</version>
     </dependency>
 
     <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-mllib -->
@@ -113,14 +113,14 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
-      <version>2.7.2</version>
+      <version>2.7.7</version>
     </dependency>
 
     <!-- https://mvnrepository.com/artifact/com.datastax.cassandra/cassandra-driver-core -->
     <dependency>
       <groupId>com.datastax.cassandra</groupId>
       <artifactId>cassandra-driver-core</artifactId>
-      <version>3.3.2</version>
+      <version>3.11.5</version>
     </dependency>
 
     <!-- Use Log4j 1.x compatible with Spark but exclude to use Spark's provided version -->
@@ -145,7 +145,7 @@
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
-      <version>4.4</version>
+      <version>4.13.2</version>
       <scope>test</scope>
     </dependency>
     <dependency>
