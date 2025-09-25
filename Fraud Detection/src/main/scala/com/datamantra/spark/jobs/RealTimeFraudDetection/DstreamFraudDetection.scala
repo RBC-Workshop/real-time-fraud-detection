@@ -12,6 +12,8 @@ import com.datastax.spark.connector.cql.CassandraConnector
 import org.apache.kafka.clients.consumer.ConsumerConfig
 import org.apache.log4j.Logger
 import org.apache.spark.ml.PipelineModel
+import io.prometheus.client.{Counter, Gauge, Histogram, CollectorRegistry}
+import io.prometheus.client.exporter.HTTPServer
 import org.apache.spark.ml.classification.RandomForestClassificationModel
 import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types.{TimestampType, DoubleType, IntegerType}
@@ -27,10 +29,37 @@ import scala.collection.mutable.Map
 object DstreamFraudDetection extends SparkJob("Fraud Detection using Dstream"){
 
   val logger = Logger.getLogger(getClass.getName)
+  
+  val fraudTransactionCounter = Counter.build()
+    .name("fraud_transactions_total")
+    .help("Total number of fraud transactions detected")
+    .register()
+    
+  val nonFraudTransactionCounter = Counter.build()
+    .name("non_fraud_transactions_total")
+    .help("Total number of non-fraud transactions processed")
+    .register()
+    
+  val batchProcessingTime = Histogram.build()
+    .name("batch_processing_duration_seconds")
+    .help("Time taken to process each batch")
+    .register()
+    
+  val mlPredictionTime = Histogram.build()
+    .name("ml_prediction_duration_seconds")
+    .help("Time taken for ML model prediction")
+    .register()
+    
+  val kafkaLagGauge = Gauge.build()
+    .name("kafka_consumer_lag")
+    .help("Current Kafka consumer lag")
+    .register()
 
   def main (args: Array[String]){
 
     Config.parseArgs(args)
+    
+    val prometheusServer = new HTTPServer(9090)
 
     import sparkSession.implicits._
     val customerDF = DataReader.readFromCassandra(CassandraConfig.keyspace, CassandraConfig.customer)
@@ -91,6 +120,7 @@ object DstreamFraudDetection extends SparkJob("Fraud Detection using Dstream"){
     transactionStream.foreachRDD(rdd => {
 
       if (!rdd.isEmpty()) {
+        val batchTimer = batchProcessingTime.startTimer()
 
         val kafkaTransactionDF = rdd.toDF("transaction", "partition", "offset")
           .withColumn(Schema.kafkaTransactionStructureName, // nested structure with our json
@@ -110,8 +140,11 @@ object DstreamFraudDetection extends SparkJob("Fraud Detection using Dstream"){
 
 
         val featureTransactionDF = preprocessingModel.transform(processedTransactionDF)
+        
+        val predictionTimer = mlPredictionTime.startTimer()
         val predictionDF = randomForestModel.transform(featureTransactionDF)
           .withColumnRenamed("prediction", "is_fraud")
+        predictionTimer.observeDuration()
 
         /*
          Connector Object is created in driver. It is serializable.
@@ -151,10 +184,12 @@ object DstreamFraudDetection extends SparkJob("Fraud Detection using Dstream"){
               if (isFraud == 1.0) {
                 // Bind and execute prepared statement for Fraud Table
                 session.execute(CreditcardTransactionRepository.cqlTransactionBind(preparedStatementFraud, record))
+                fraudTransactionCounter.inc()
               }
               else if(isFraud == 0.0) {
                 // Bind and execute prepared statement for NonFraud Table
                 session.execute(CreditcardTransactionRepository.cqlTransactionBind(preparedStatementNonFraud, record))
+                nonFraudTransactionCounter.inc()
               }
               //Get max offset in the current match
               val kafkaPartition = record.getAs[Int]("partition")
@@ -178,7 +213,7 @@ object DstreamFraudDetection extends SparkJob("Fraud Detection using Dstream"){
           })
         })
 
-
+        batchTimer.observeDuration()
       }
       else {
         logger.info("Did not receive any data")

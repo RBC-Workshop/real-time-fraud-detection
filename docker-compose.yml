@@ -1,0 +1,202 @@
+version: '3.8'
+
+services:
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper/data
+      - zookeeper-logs:/var/lib/zookeeper/log
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "9999:9999"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: 'zookeeper:2181'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_JMX_PORT: 9999
+      KAFKA_JMX_HOSTNAME: localhost
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+
+  cassandra:
+    image: cassandra:4.1
+    hostname: cassandra
+    container_name: cassandra
+    ports:
+      - "9042:9042"
+      - "7199:7199"
+    environment:
+      - CASSANDRA_CLUSTER_NAME=FraudDetectionCluster
+      - CASSANDRA_DC=DC1
+      - CASSANDRA_RACK=Rack1
+      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+      - MAX_HEAP_SIZE=1G
+      - HEAP_NEWSIZE=256M
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+      - ./Cassandra Keyspace.cql:/docker-entrypoint-initdb.d/init.cql
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces'"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kafka-producer:
+    build:
+      context: .
+      dockerfile: docker/kafka-producer.Dockerfile
+    container_name: kafka-producer
+    depends_on:
+      - kafka
+    environment:
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - KAFKA_TOPIC=creditcardTransaction
+    volumes:
+      - ./src:/app/data
+
+  spark-streaming:
+    build:
+      context: .
+      dockerfile: docker/spark-jobs.Dockerfile
+    container_name: spark-streaming
+    depends_on:
+      - kafka
+      - cassandra
+    ports:
+      - "4040:4040"
+      - "9090:9090"
+    environment:
+      - SPARK_MASTER=local[*]
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:29092
+      - CASSANDRA_HOST=cassandra
+      - CASSANDRA_PORT=9042
+      - MODEL_PATH=/app/models
+      - CHECKPOINT_PATH=/app/checkpoints
+    volumes:
+      - spark-models:/app/models
+      - spark-checkpoints:/app/checkpoints
+
+  fraud-dashboard:
+    build:
+      context: .
+      dockerfile: docker/spring-dashboard.Dockerfile
+    container_name: fraud-dashboard
+    depends_on:
+      - cassandra
+    ports:
+      - "8080:8080"
+    environment:
+      - CASSANDRA_HOST=cassandra
+      - CASSANDRA_PORT=9042
+      - CASSANDRA_KEYSPACE=creditcard
+      - SERVER_PORT=8080
+      - MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE=health,info,prometheus,metrics
+      - MANAGEMENT_ENDPOINT_HEALTH_SHOW_DETAILS=always
+
+  flask-api:
+    build:
+      context: .
+      dockerfile: docker/flask-api.Dockerfile
+    container_name: flask-api
+    depends_on:
+      - cassandra
+    ports:
+      - "5050:5050"
+    environment:
+      - CASSANDRA_HOST=cassandra
+      - CASSANDRA_PORT=9042
+      - CASSANDRA_KEYSPACE=creditcard
+      - FLASK_PORT=5050
+      - FLASK_DEBUG=false
+      - JAEGER_AGENT_HOST=jaeger-agent
+      - JAEGER_AGENT_PORT=6831
+
+  prometheus:
+    image: prom/prometheus:v2.47.0
+    container_name: prometheus
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus:/etc/prometheus
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+
+  grafana:
+    image: grafana/grafana:10.1.0
+    container_name: grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana:/etc/grafana/provisioning
+
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./monitoring/loki:/etc/loki
+      - loki-data:/tmp/loki
+    command: -config.file=/etc/loki/loki-config.yaml
+
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: promtail
+    volumes:
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - ./monitoring/promtail:/etc/promtail
+    command: -config.file=/etc/promtail/config.yml
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.49
+    container_name: jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+
+volumes:
+  zookeeper-data:
+  zookeeper-logs:
+  kafka-data:
+  cassandra-data:
+  spark-models:
+  spark-checkpoints:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+
+networks:
+  default:
+    name: fraud-detection-network

@@ -9,10 +9,19 @@ import json
 import copy
 import pandas as pd
 from datetime import datetime
+import os
+import uuid
 
-from flask import Flask, Response, render_template
+from flask import Flask, Response, render_template, jsonify
 from flask import request
 from flask_table import Table, Col
+from prometheus_client import Counter, Histogram, Gauge, generate_latest, CONTENT_TYPE_LATEST
+from opentelemetry import trace
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+from opentelemetry.instrumentation.flask import FlaskInstrumentor
+from opentelemetry.instrumentation.cassandra import CassandraInstrumentor
 
 from resources import query_execute as C
 
@@ -20,6 +29,25 @@ _default_limit = 10
 
 
 application = Flask(__name__)
+
+trace.set_tracer_provider(TracerProvider())
+tracer = trace.get_tracer(__name__)
+
+otlp_exporter = OTLPSpanExporter(
+    endpoint=os.getenv("OTLP_ENDPOINT", "http://localhost:4317"),
+    insecure=True,
+)
+
+span_processor = BatchSpanProcessor(otlp_exporter)
+trace.get_tracer_provider().add_span_processor(span_processor)
+
+FlaskInstrumentor().instrument_app(application)
+CassandraInstrumentor().instrument()
+
+request_count = Counter('flask_requests_total', 'Total Flask requests', ['method', 'endpoint'])
+request_duration = Histogram('flask_request_duration_seconds', 'Flask request duration')
+cassandra_query_duration = Histogram('cassandra_query_duration_seconds', 'Cassandra query duration')
+active_connections = Gauge('cassandra_active_connections', 'Active Cassandra connections')
 
 
 ##################################################################################################################
@@ -114,10 +142,13 @@ def log_response(method, status, data, txt):
 # This function performs a basic health check. We will flesh this out.
 @application.route("/api/health", methods=["GET"])
 def health_check():
-
-    rsp_data = { "status": "healthy", "time": str(datetime.now()) }
-    rsp = Response(rsp_data, status=200, content_type="application/json")
-    return rsp
+    with tracer.start_as_current_span("health_check") as span:
+        request_count.labels(method='GET', endpoint='/api/health').inc()
+        with request_duration.time():
+            span.set_attribute("http.method", "GET")
+            span.set_attribute("http.route", "/api/health")
+            rsp_data = { "status": "healthy", "time": str(datetime.now()) }
+            return jsonify(rsp_data)
 
 
 @application.route("/api/demo/<parameter>", methods=["GET", "POST"])
@@ -135,10 +166,16 @@ def demo(parameter):
 
 @application.route("/api/customer/<cc_num>", methods=["GET"])
 def get_character_by_id(cc_num):
-
-    res = C.get_costumer_by_id(cc_num)
-    df = pd.DataFrame([res], columns=res.keys())
-    return render_template("customer.html", tables=[df.to_html(index=False)], titles=df.columns.values, cc_num=cc_num)
+    with tracer.start_as_current_span("get_customer") as span:
+        request_count.labels(method='GET', endpoint='/api/customer').inc()
+        with request_duration.time():
+            with cassandra_query_duration.time():
+                res = C.get_costumer_by_id(cc_num)
+            span.set_attribute("http.method", "GET")
+            span.set_attribute("http.route", "/api/customer")
+            span.set_attribute("customer.cc_num", cc_num)
+            df = pd.DataFrame([res], columns=list(res.keys()))
+            return render_template("customer.html", tables=[df.to_html(index=False)], titles=df.columns.values, cc_num=cc_num)
 
     # rsp = Response(json.dumps(res), status=200, content_type="application/json")
     # return rsp
@@ -146,20 +183,32 @@ def get_character_by_id(cc_num):
 
 @application.route("/api/statement/<cc_num>", methods=["GET"])
 def get_statement_by_id(cc_num):
-
-    res = C.get_statement_by_id(cc_num)
-    df = pd.DataFrame(res["data"])
-    df.sort_values(by="trans_time")
-    return render_template("statement.html", tables=[df.to_html(index=False)], titles=df.columns.values, cc_num=cc_num)
+    with tracer.start_as_current_span("get_statement") as span:
+        request_count.labels(method='GET', endpoint='/api/statement').inc()
+        with request_duration.time():
+            with cassandra_query_duration.time():
+                res = C.get_statement_by_id(cc_num)
+            span.set_attribute("http.method", "GET")
+            span.set_attribute("http.route", "/api/statement")
+            span.set_attribute("customer.cc_num", cc_num)
+            span.set_attribute("statement.transaction_count", len(res["data"]))
+            df = pd.DataFrame(res["data"])
+            df.sort_values(by="trans_time")
+            return render_template("statement.html", tables=[df.to_html(index=False)], titles=df.columns.values, cc_num=cc_num)
 
     # rsp = Response(json.dumps(res), status=200, content_type="application/json")
     # return rsp
 
 
+@application.route("/metrics")
+def metrics():
+    return generate_latest(), 200, {'Content-Type': CONTENT_TYPE_LATEST}
+
 # run the app.
 if __name__ == "__main__":
     # Setting debug to True enables debug output. This line should be
     # removed before deploying a production app.
-
-    application.debug = True
-    application.run(host='0.0.0.0', port=5050)
+    
+    port = int(os.getenv("FLASK_PORT", "5050"))
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    application.run(host='0.0.0.0', port=port, debug=debug)

@@ -1,0 +1,65 @@
+groups:
+- name: fraud_detection_alerts
+  rules:
+  - alert: HighFraudRate
+    expr: rate(fraud_transactions_total[5m]) > 0.1
+    for: 2m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High fraud detection rate"
+      description: "Fraud detection rate is {{ $value }} transactions per second"
+
+  - alert: SparkStreamingLag
+    expr: kafka_consumer_lag > 1000
+    for: 5m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Spark streaming consumer lag is high"
+      description: "Kafka consumer lag is {{ $value }} messages"
+
+  - alert: CassandraDown
+    expr: up{job="cassandra"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Cassandra is down"
+      description: "Cassandra database is not responding"
+
+  - alert: FlaskAPIDown
+    expr: up{job="flask-api"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Flask API is down"
+      description: "Flask API service is not responding"
+
+  - alert: SpringBootDashboardDown
+    expr: up{job="spring-boot-dashboard"} == 0
+    for: 1m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Spring Boot Dashboard is down"
+      description: "Spring Boot Dashboard service is not responding"
+
+  - alert: HighMLPredictionLatency
+    expr: histogram_quantile(0.95, rate(ml_prediction_duration_seconds_bucket[5m])) > 1.0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High ML prediction latency"
+      description: "95th percentile ML prediction latency is {{ $value }} seconds"
+
+  - alert: HighBatchProcessingTime
+    expr: histogram_quantile(0.95, rate(batch_processing_duration_seconds_bucket[5m])) > 30.0
+    for: 5m
+    labels:
+      severity: warning
+    annotations:
+      summary: "High batch processing time"
+      description: "95th percentile batch processing time is {{ $value }} seconds"

@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: cassandra
+  name: cassandra
+  namespace: cassandra
+spec:
+  clusterIP: None
+  ports:
+  - port: 9042
+    name: cql
+  - port: 7199
+    name: jmx
+  selector:
+    app: cassandra
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: cassandra
+  name: cassandra-external
+  namespace: cassandra
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 9042
+    targetPort: 9042
+    name: cql
+  selector:
+    app: cassandra
