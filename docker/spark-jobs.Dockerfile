@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy the built JAR
-COPY --from=builder /app/target/original-fruaddetection-spark.jar app.jar
+COPY --from=builder /app/target/FraudDetection-1.0-SNAPSHOT-jar-with-dependencies.jar app.jar
 
 # Create directories for models and checkpoints
 RUN mkdir -p /app/models /app/checkpoints /app/data
