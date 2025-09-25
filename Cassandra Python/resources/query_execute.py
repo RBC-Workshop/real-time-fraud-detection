@@ -1,9 +1,14 @@
 from cassandra.cluster import Cluster
 import copy
 from datetime import datetime
+import os
 
-cluster = Cluster()
-session = cluster.connect("creditcard")
+cassandra_host = os.getenv("CASSANDRA_HOST", "127.0.0.1")
+cassandra_port = int(os.getenv("CASSANDRA_PORT", "9042"))
+cassandra_keyspace = os.getenv("CASSANDRA_KEYSPACE", "creditcard")
+
+cluster = Cluster([cassandra_host], port=cassandra_port)
+session = cluster.connect(cassandra_keyspace)
 
 def get_by_query(table_name, args):
 
