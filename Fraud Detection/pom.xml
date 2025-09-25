@@ -12,17 +12,17 @@
 
   <repositories>
     <repository>
-      <id>scala-tools.org</id>
-      <name>Scala-Tools Maven2 Repository</name>
-      <url>http://scala-tools.org/repo-releases</url>
+      <id>central</id>
+      <name>Maven Central Repository</name>
+      <url>https://repo1.maven.org/maven2</url>
     </repository>
   </repositories>
 
   <pluginRepositories>
     <pluginRepository>
-      <id>scala-tools.org</id>
-      <name>Scala-Tools Maven2 Repository</name>
-      <url>http://scala-tools.org/repo-releases</url>
+      <id>central</id>
+      <name>Maven Central Repository</name>
+      <url>https://repo1.maven.org/maven2</url>
     </pluginRepository>
   </pluginRepositories>
 
@@ -80,6 +80,7 @@
       <groupId>com.databricks</groupId>
       <artifactId>spark-csv_${scala.tools.version}</artifactId>
       <version>1.5.0</version>
+      <!-- Note: This dependency is deprecated. Consider migrating to built-in Spark SQL CSV support -->
     </dependency>
 
     <!-- https://mvnrepository.com/artifact/com.github.scopt/scopt_2.10 -->
@@ -113,7 +114,7 @@
     <dependency>
       <groupId>org.apache.hadoop</groupId>
       <artifactId>hadoop-client</artifactId>
-      <version>2.7.2</version>
+      <version>3.3.6</version>
     </dependency>
 
     <!-- https://mvnrepository.com/artifact/com.datastax.cassandra/cassandra-driver-core -->
@@ -123,11 +124,50 @@
       <version>3.3.2</version>
     </dependency>
 
-    <!-- https://mvnrepository.com/artifact/log4j/log4j -->
+    <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-core -->
     <dependency>
-      <groupId>log4j</groupId>
-      <artifactId>log4j</artifactId>
-      <version>1.2.17</version>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-core</artifactId>
+      <version>2.21.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.logging.log4j</groupId>
+      <artifactId>log4j-api</artifactId>
+      <version>2.21.1</version>
+    </dependency>
+
+    <!-- Jackson security fixes - override transitive dependencies -->
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-databind</artifactId>
+      <version>2.15.2</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-core</artifactId>
+      <version>2.15.2</version>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.core</groupId>
+      <artifactId>jackson-annotations</artifactId>
+      <version>2.15.2</version>
+    </dependency>
+
+    <!-- Additional security fixes for critical vulnerabilities -->
+    <dependency>
+      <groupId>org.apache.avro</groupId>
+      <artifactId>avro</artifactId>
+      <version>1.11.3</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.commons</groupId>
+      <artifactId>commons-compress</artifactId>
+      <version>1.24.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.codehaus.plexus</groupId>
+      <artifactId>plexus-utils</artifactId>
+      <version>3.5.1</version>
     </dependency>
  <!-- https://mvnrepository.com/artifact/log4j/log4j -->
   <!--  <dependency>
@@ -213,8 +253,9 @@
     <finalName>fruaddetection-spark</finalName>
     <plugins>
       <plugin>
-        <groupId>org.scala-tools</groupId>
-        <artifactId>maven-scala-plugin</artifactId>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <version>4.8.1</version>
         <executions>
           <execution>
             <goals>
@@ -342,8 +383,9 @@
   <reporting>
     <plugins>
       <plugin>
-        <groupId>org.scala-tools</groupId>
-        <artifactId>maven-scala-plugin</artifactId>
+        <groupId>net.alchim31.maven</groupId>
+        <artifactId>scala-maven-plugin</artifactId>
+        <version>4.8.1</version>
         <configuration>
           <scalaVersion>${scala.version}</scalaVersion>
         </configuration>
