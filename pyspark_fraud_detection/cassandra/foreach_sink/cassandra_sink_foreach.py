@@ -5,7 +5,7 @@ from typing import Optional
 from pyspark.sql import Row
 from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
-from ..cassandra_config import CassandraConfig
+from ...config.cassandra_config import CassandraConfig
 from ...creditcard.enums import TransactionColumns
 
 logger = logging.getLogger(__name__)

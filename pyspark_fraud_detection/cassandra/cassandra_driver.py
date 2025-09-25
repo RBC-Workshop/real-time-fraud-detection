@@ -5,7 +5,7 @@ from typing import List, Tuple, Optional
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import max as spark_max
 from cassandra.cluster import Cluster
-from .cassandra_config import CassandraConfig
+from ..config.cassandra_config import CassandraConfig
 from .foreach_sink.cassandra_sink_foreach import CassandraSinkForeach
 
 logger = logging.getLogger(__name__)
