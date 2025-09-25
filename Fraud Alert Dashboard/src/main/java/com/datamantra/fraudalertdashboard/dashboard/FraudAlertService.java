@@ -8,7 +8,8 @@ import java.util.*;
 import com.datamantra.fraudalertdashboard.dao.FraudAlertDataRepository;
 import com.datamantra.fraudalertdashboard.dao.entity.FraudAlertData;
 import com.datamantra.fraudalertdashboard.vo.Response;
-import org.apache.log4j.Logger;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -21,7 +22,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class FraudAlertService {
-	private static final Logger logger = Logger.getLogger(FraudAlertService.class);
+	private static final Logger logger = LogManager.getLogger(FraudAlertService.class);
 
 
 	@Autowired

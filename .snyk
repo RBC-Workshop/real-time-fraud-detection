@@ -1,0 +1,8 @@
+# Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
+version: v1.25.0
+# ignores vulnerabilities until expiry date; change duration by modifying expiry date
+ignore:
+  SNYK-JAVA-JUNIT-31518:
+    - '*':
+        reason: Dev-only test dependency, not deployed to production
+        expires: 2025-12-25T00:00:00.000Z
