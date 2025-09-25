@@ -1,4 +1,91 @@
 # Real-time Credit Card Fraud Detection Pipeline
+
+## Python/PySpark Infrastructure (NEW)
+
+This project now includes a Python/PySpark implementation alongside the original Scala components. The new `datamantra` Python package provides identical functionality to the Scala implementation while supporting both local and cluster deployment modes.
+
+### DataMantra Python Package
+
+The `datamantra` package is located in the `Fraud Detection/` directory and provides the foundational components for real-time fraud detection:
+
+```
+datamantra/
+├── config/          # Configuration management
+│   ├── config.py           # Main configuration loader (Config.scala equivalent)
+│   ├── spark_config.py     # Spark-specific settings (SparkConfig.scala equivalent)
+│   └── cassandra_config.py # Cassandra connection settings
+├── data/            # Data loading infrastructure
+│   └── data_reader.py      # CSV and Cassandra data reading (DataReader.scala equivalent)
+├── schema/          # Schema definitions
+│   ├── schemas.py          # Spark SQL schemas (Schema.scala equivalent)
+│   └── enums.py           # Field name constants (CreditcardEnum.scala equivalent)
+└── utils/           # Utility functions
+    └── utils.py           # Geographic distance calculations (Utils.scala equivalent)
+```
+
+### Installation and Setup
+
+1. **Install Dependencies:**
+   ```bash
+   cd "Fraud Detection"
+   pip install -r requirements.txt
+   ```
+
+2. **Install Package:**
+   ```bash
+   pip install -e .
+   ```
+
+### Key Features
+
+- **Dual Deployment Support**: Automatically configures for local development or cluster deployment
+- **HOCON Configuration**: Uses PyHOCON library to parse existing `.conf` files
+- **Schema Validation**: Enforces identical data schemas as Scala implementation
+- **Cassandra Integration**: Full compatibility with existing Cassandra tables
+- **ML Model Loading**: Supports both local filesystem and S3 paths for model storage
+- **Geographic Calculations**: Identical Haversine distance formula implementation
+
+### Usage Examples
+
+```python
+from datamantra import Config, DataReader, get_distance
+from datamantra.schema import transaction_schema, TransactionKafka
+from pyspark.sql import SparkSession
+
+# Initialize configuration
+Config.parse_args(["path/to/application.conf"])
+
+# Create Spark session
+spark = SparkSession.builder.appName("FraudDetection").getOrCreate()
+
+# Load transaction data with schema validation
+df = DataReader.read("data/transactions.csv", transaction_schema, spark)
+
+# Calculate geographic distance
+distance_km = get_distance(40.7128, -74.0060, 34.0522, -118.2437)  # NY to LA
+
+# Access field names consistently
+cc_field = TransactionKafka.cc_num  # "cc_num"
+```
+
+### Testing
+
+Run the test suite to verify functionality:
+```bash
+cd "Fraud Detection"
+python test_datamantra.py
+```
+
+### Configuration
+
+The Python package uses the same HOCON configuration format as the Scala implementation. It automatically detects deployment mode and adjusts paths accordingly:
+
+- **Local Mode**: Uses `file:///` prefixes for local filesystem access
+- **Cluster Mode**: Supports S3 and distributed storage paths
+- **Cassandra**: Maintains identical keyspace and table configurations
+
+## Original Scala Implementation
+
 ## Workflow and Architecture
 Following figure illustrates the workflow and architecture of the whole pipeline:
 ![architecture](./src/architecture.png)
