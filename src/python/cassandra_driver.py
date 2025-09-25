@@ -8,6 +8,8 @@ for writing fraud detection results to Cassandra tables.
 import logging
 import sys
 import os
+import time
+import random
 from typing import Optional
 from pyspark.sql import DataFrame
 from pyspark.sql.streaming import StreamingQuery
@@ -20,6 +22,7 @@ from config import Config
 try:
     from cassandra.cluster import Cluster
     from cassandra.auth import PlainTextAuthProvider
+    from cassandra import ConsistencyLevel
 except ImportError:
     raise ImportError("cassandra-driver package is required. Install with: pip install cassandra-driver")
 
@@ -34,15 +37,20 @@ class CassandraForeachWriter:
         self.logger = logging.getLogger(__name__)
     
     def open(self, partition_id: int, epoch_id: int) -> bool:
-        """Open Cassandra connection for this partition."""
-        try:
-            cassandra_config = Config.get_cassandra_config()
-            cluster = Cluster([cassandra_config.cassandra_host])
-            self.session = cluster.connect()
-            return True
-        except Exception as e:
-            self.logger.error(f"Failed to open Cassandra connection: {str(e)}")
-            return False
+        """Open Cassandra connection for this partition with retry logic."""
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                cassandra_config = Config.get_cassandra_config()
+                cluster = Cluster([cassandra_config.cassandra_host])
+                self.session = cluster.connect()
+                self.session.default_consistency_level = ConsistencyLevel.LOCAL_QUORUM
+                return True
+            except Exception as e:
+                self.logger.error(f"Failed to open Cassandra connection (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt + random.uniform(0, 1))
+        return False
     
     def process(self, row) -> None:
         """Process a single row and write to Cassandra."""
@@ -71,7 +79,7 @@ class CassandraForeachWriter:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """
                 
-                self.session.execute(cql, (
+                self._execute_with_retry(cql, (
                     row[TransactionCassandra.cc_num],
                     row[TransactionCassandra.trans_time],
                     row[TransactionCassandra.trans_num],
@@ -85,8 +93,37 @@ class CassandraForeachWriter:
                     row[TransactionCassandra.is_fraud]
                 ))
                 
+            elif self.table == cassandra_config.kafka_offset_table:
+                cql = f"""
+                INSERT INTO {self.keyspace}.{self.table} (
+                    {TransactionCassandra.kafka_partition},
+                    {TransactionCassandra.kafka_offset}
+                ) VALUES (?, ?)
+                """
+                
+                self._execute_with_retry(cql, (
+                    row[TransactionCassandra.kafka_partition],
+                    row[TransactionCassandra.kafka_offset]
+                ))
+                
         except Exception as e:
             self.logger.error(f"Failed to process row: {str(e)}")
+    
+    def _execute_with_retry(self, cql: str, params: tuple, max_retries: int = 3) -> None:
+        """Execute CQL with exponential backoff retry."""
+        if not self.session:
+            raise RuntimeError("Cassandra session not initialized")
+            
+        for attempt in range(max_retries):
+            try:
+                self.session.execute(cql, params)
+                return
+            except Exception as e:
+                self.logger.error(f"CQL execution failed (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt + random.uniform(0, 1))
+                else:
+                    raise e
     
     def close(self, error: Optional[Exception]) -> None:
         """Close Cassandra connection."""
@@ -114,3 +151,96 @@ class CassandraDriver:
             .outputMode(mode) \
             .foreach(CassandraForeachWriter(keyspace, table)) \
             .start()
+    
+    @classmethod
+    def read_offset(cls, keyspace: str, table: str, spark_session) -> tuple:
+        """
+        Read offset from Cassandra for Structured Streaming.
+        
+        Equivalent to CassandraDriver.readOffset() in Scala.
+        Returns tuple of (startingOption, partitionsAndOffsets).
+        """
+        cls.logger.info(f"Reading offset from {keyspace}.{table}")
+        
+        try:
+            df = spark_session.read \
+                .format("org.apache.spark.sql.cassandra") \
+                .option("keyspace", keyspace) \
+                .option("table", table) \
+                .option("pushdown", "true") \
+                .load() \
+                .select("partition", "offset")
+            
+            if df.rdd.isEmpty():
+                return ("startingOffsets", "earliest")
+            else:
+                return ("startingOffsets", cls._transform_kafka_metadata_to_json(df.collect()))
+                
+        except Exception as e:
+            cls.logger.error(f"Failed to read offset: {str(e)}")
+            return ("startingOffsets", "earliest")
+    
+    @classmethod
+    def _transform_kafka_metadata_to_json(cls, rows) -> str:
+        """
+        Transform Kafka metadata array to JSON format.
+        
+        Equivalent to CassandraDriver.transformKafkaMetadataArrayToJson() in Scala.
+        Returns JSON like: {"creditTransaction":{"0":23,"1":-1}}
+        """
+        partition_offset = ""
+        for row in rows:
+            partition = row["partition"]
+            offset = row["offset"]
+            partition_offset += f'"{partition}":{offset}, '
+        
+        if partition_offset:
+            partition_offset = partition_offset[:-2]
+        
+        partition_and_offset = f'{{"creditTransaction":{{{partition_offset}}}}}'
+        cls.logger.info(f"Transformed offset: {partition_and_offset}")
+        
+        return partition_and_offset
+    
+    @classmethod
+    def save_offset(cls, keyspace: str, table: str, df, spark_session) -> None:
+        """
+        Save offset to Cassandra for Structured Streaming.
+        
+        Equivalent to CassandraDriver.saveOffset() in Scala.
+        """
+        cls.logger.info(f"Saving offset to {keyspace}.{table}")
+        
+        df.write \
+            .format("org.apache.spark.sql.cassandra") \
+            .options({"keyspace": keyspace, "table": table}) \
+            .save()
+
+
+class CassandraConnectionPool:
+    """Connection pool for Cassandra sessions."""
+    
+    _instance = None
+    _cluster = None
+    _session = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def get_session(self):
+        """Get or create Cassandra session."""
+        if self._session is None:
+            cassandra_config = Config.get_cassandra_config()
+            self._cluster = Cluster([cassandra_config.cassandra_host])
+            self._session = self._cluster.connect()
+            self._session.default_consistency_level = ConsistencyLevel.LOCAL_QUORUM
+        return self._session
+    
+    def close(self):
+        """Close connection pool."""
+        if self._session:
+            self._session.shutdown()
+        if self._cluster:
+            self._cluster.shutdown()

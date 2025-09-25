@@ -23,6 +23,7 @@ from config import Config
 from kafka_source import KafkaSource
 from ml_pipeline import MLPipeline
 from cassandra_driver import CassandraDriver
+from graceful_shutdown import GracefulShutdown
 from utils import distance_udf
 
 
@@ -130,18 +131,10 @@ class FraudDetectionJob:
         self.streaming_queries = [fraud_query, non_fraud_query]
         return self.streaming_queries
     
-    def setup_graceful_shutdown(self):
-        """Set up graceful shutdown handling."""
-        def signal_handler(signum, frame):
-            self.logger.info("Received shutdown signal, stopping streaming queries...")
-            for query in self.streaming_queries:
-                query.stop()
-            if self.spark_session:
-                self.spark_session.stop()
-            sys.exit(0)
-        
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
+    def setup_graceful_shutdown(self, spark_session: SparkSession):
+        """Set up graceful shutdown handling with file marker support."""
+        graceful_shutdown = GracefulShutdown(self.streaming_queries, check_interval=1000)
+        graceful_shutdown.handle_graceful_shutdown(spark_session)
     
     def run(self, args=None):
         """Run the complete fraud detection streaming job."""
@@ -154,12 +147,9 @@ class FraudDetectionJob:
             
             queries = self.start_streaming_queries(fraud_df, non_fraud_df)
             
-            self.setup_graceful_shutdown()
-            
             self.logger.info("Fraud detection streaming job started successfully")
             
-            for query in queries:
-                query.awaitTermination()
+            self.setup_graceful_shutdown(self.spark_session)
                 
         except Exception as e:
             self.logger.error(f"Fraud detection job failed: {str(e)}")
